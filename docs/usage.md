@@ -3,6 +3,8 @@
 Lore finds passages in Markdown documentation and returns their source locations.
 Start with a question, then read the relevant files or sections.
 
+For installation and a workflow tailored to coding agents, see [AI agents](agents.md).
+
 ## Index a project
 
 First [install Lore](../README.md#install), then run:

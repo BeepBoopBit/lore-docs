@@ -3,21 +3,29 @@
 Lore serves one indexed project over MCP stdio. The client starts the process
 and communicates through stdin/stdout; there is no HTTP server or port to open.
 
+For an agent doing the installation, start with the [AI agent guide](agents.md).
+The published `lore-docs` package supplies the executable used in these examples.
+
 ## Connect Codex
 
 Install Codex CLI and [install Lore](../README.md#install). From your project:
 
 ```sh
-cd /path/to/project
+cd "/path/to/project"
 lore model install
 lore index .
+lore status --check --json
 codex mcp add lore-project -- "$(command -v lore)" \
   --index-dir "$PWD/.lore" mcp
+codex mcp get lore-project --json
 ```
 
 This registers an absolute executable and index path, so the client can start
 Lore from any directory. Models default to `models/bge-small` inside the index
 directory. Use a distinct connection name for each project.
+
+The final command shows the saved registration. Check its executable and index
+paths before starting the agent session.
 
 Start a new Codex session and check `/mcp`. Ask the agent to call `lore_status`.
 Its `root` should be your project's absolute path, `root_available` should be
@@ -100,6 +108,9 @@ Set `command` to the absolute path of the Lore executable. Set the index and
 model paths to the directories prepared above. The executable can be the
 installed binary or the release build from `./dev.sh build`.
 
+Reload the client's MCP configuration or restart it, then call `lore_status`
+to verify the connected project.
+
 The client should launch the equivalent of:
 
 ```sh
@@ -110,6 +121,9 @@ A server started in a terminal waits for protocol input. Startup errors go to
 stderr; stdout is reserved for MCP messages.
 
 ## Available tools
+
+See the [agent workflow](agents.md#use-mcp-tools) for the search/read sequence and
+how to handle structured responses and stale sources.
 
 | Tool | Purpose |
 | --- | --- |

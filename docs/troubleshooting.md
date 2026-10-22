@@ -1,7 +1,7 @@
 # Troubleshooting
 
-Run `./dev.sh doctor` from the Lore checkout to check the development tools.
-For index problems, start with:
+Check the installed command with `lore --version`. From a Lore checkout,
+`./dev.sh doctor` also checks development tools. For index problems, start with:
 
 ```sh
 lore --index-dir /path/to/index status --check --json
@@ -73,6 +73,10 @@ or belongs to another target, restart without it. Keep the same target and
 Confirm the configured executable exists and the index was prepared before the
 client started it. Inspect the client's server stderr for the actual error.
 `lore mcp` waits for protocol input when started directly in a terminal.
+
+For Codex, `codex mcp get CONNECTION_NAME --json` shows the saved executable and
+arguments. Use absolute paths: an agent client may launch Lore outside the project
+directory. Installing the binary alone does not register an MCP server.
 
 After setup or reinstall, start a new Codex session. If setup reports an existing
 entry, use `refresh` to update documents or `setup --replace` to change the

@@ -46,20 +46,19 @@ lore read README.md --json
 Add `--json` to `brief` for structured results. After editing docs, rerun
 `lore index /path/to/project` to refresh the index.
 
-## Use with Codex
+## Use with AI agents
 
-With Codex CLI installed, prepare your project and register Lore:
+Give your agent the [setup guide](docs/agents.md), or paste this request:
 
-```sh
-cd /path/to/project
-lore model install
-lore index .
-codex mcp add lore-project -- "$(command -v lore)" \
-  --index-dir "$PWD/.lore" mcp
+```text
+Set up Lore for this project using:
+https://raw.githubusercontent.com/BeepBoopBit/lore-docs/main/docs/agents.md
+Install lore-docs with Cargo, prepare the index, verify it, and run a search.
+Connect it through MCP if this client supports local MCP servers.
 ```
 
-Start a new Codex session to use it. Rerun `lore index .` after editing docs.
-See [MCP setup](docs/mcp.md) for other clients and the checkout helper.
+Agents can use JSON CLI output or the read-only MCP tools. See
+[MCP setup](docs/mcp.md) for Codex and other clients.
 
 ## Development
 
@@ -81,6 +80,7 @@ Run `./dev.sh` for help. The older `install --prod` form still works.
 
 ## Guides
 
+- [AI agents](docs/agents.md) — install, verify setup, search, and read sources.
 - [Usage](docs/usage.md) — index, search, and read documentation.
 - [MCP setup](docs/mcp.md) — connect coding agents and multiple projects.
 - [Operations](docs/operations.md) — refresh, move, back up, and clean up state.
