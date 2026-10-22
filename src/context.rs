@@ -323,7 +323,7 @@ impl Index {
                 .map(|id| {
                     sections
                         .get(&id)
-                        .map(&target_for)
+                        .map(target_for)
                         .context("Invalid section ancestry; reindex required")
                 })
                 .transpose()?,
