@@ -1,6 +1,6 @@
 [package]
 name = "lore-docs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.88"
 description = "Local Markdown discovery for agents"
@@ -45,6 +45,8 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"
+tempfile = "3"
+toml_edit = "=0.23.7"
 sqlite-vec = "=0.1.7"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
 ureq = { version = "3", default-features = false, features = ["rustls"] }

@@ -83,6 +83,8 @@ class InstallerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="lore installer $literal ")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        self.home = self.root / "home"
+        self.home.mkdir()
         self.repo = self.root / "Lore checkout"
         (self.repo / "examples").mkdir(parents=True)
         self.script = self.repo / "dev.sh"
@@ -107,6 +109,7 @@ class InstallerTests(unittest.TestCase):
         executable(self.tools / "codex", FAKE_CODEX)
         executable(self.artifact, FAKE_LORE)
         self.env = os.environ | {
+            "HOME": str(self.home),
             "PATH": f"{self.tools}:{os.environ['PATH']}",
             "LORE_DEV_INSTALL_DIR": str(self.install),
             "CARGO_TARGET_DIR": str(self.root / "build cache"),
@@ -155,7 +158,7 @@ class InstallerTests(unittest.TestCase):
         index = self.repo / ".lore/mcp/lore-undercurrent"
         self.assertEqual(call, ["codex", "mcp", "add", "lore-undercurrent", "--",
             str(self.binary), "--index-dir", str(index), "--model-dir",
-            str(self.repo / ".lore/models/bge-small"), "mcp"])
+            str(self.home / ".lore/models/bge-small"), "mcp"])
         lore_calls = self.calls("lore")
         self.assertEqual(lore_calls[0][-2:], ["model", "install"])
         self.assertEqual(lore_calls[1][-3:], ["index", str(self.corpus), "--json"])
@@ -192,6 +195,20 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(len(set(indexes)), 2)
         models = [row[9] for row in self.registrations()]
         self.assertEqual(len(set(models)), 1)
+        self.assertEqual(models[0], str(self.home / ".lore/models/bge-small"))
+
+    def test_default_models_are_shared_between_lore_checkouts(self):
+        self.run_script("install", "--prod")
+        self.run_script("setup", self.corpus.name)
+        other_checkout = self.root / "another Lore checkout"
+        other_checkout.mkdir()
+        other_script = other_checkout / "dev.sh"
+        executable(other_script, SCRIPT.read_text())
+        subprocess.run([str(other_script), "setup", str(self.corpus),
+                        "--name", "lore-another"], cwd=self.root, env=self.env,
+                       text=True, capture_output=True, timeout=20, check=True)
+        models = [row[9] for row in self.registrations()]
+        self.assertEqual(models, [str(self.home / ".lore/models/bge-small")] * 2)
 
     def test_explicit_profile_with_spaces_and_registration_failure(self):
         profile = self.root / "roles config.json"

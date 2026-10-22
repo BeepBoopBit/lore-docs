@@ -1,9 +1,12 @@
+mod cli_help;
+
 use anyhow::{Context, Result, ensure};
 use clap::{Args, Parser, Subcommand};
 use lore::{
     embedding::{self, LocalEmbedder},
     evaluate::{self, EvaluationCase},
     index::Index,
+    onboarding::{self, Client},
     preferences::{Qualifier, QualifierMode},
     reading::PageOptions,
     reranking::{self, LocalReranker, RerankMode, Reranker},
@@ -17,33 +20,44 @@ use std::{
 #[command(
     name = "lore",
     version,
-    about = "Local Markdown navigation with ranked source evidence"
+    about = "Search your project's Markdown documentation locally",
+    long_about = "Search your project's Markdown documentation locally.\n\nFind relevant passages, then read their source files or sections.\nWorks from your terminal or through an AI agent using MCP.",
+    after_help = cli_help::CLI
 )]
 struct Cli {
-    #[arg(long, global = true, default_value = ".lore")]
-    index_dir: PathBuf,
-    #[arg(long, global = true)]
+    /// Index directory [default: saved project directory, or .lore].
+    #[arg(long, global = true, value_name = "PATH")]
+    index_dir: Option<PathBuf>,
+    /// Search model directory [default: saved setting, or ~/.lore/models/bge-small].
+    #[arg(long, global = true, value_name = "PATH")]
     model_dir: Option<PathBuf>,
-    #[arg(long, global = true)]
+    /// Optional reranker directory [default: ~/.lore/models/minilm-reranker].
+    #[arg(long, global = true, value_name = "PATH")]
     reranker_dir: Option<PathBuf>,
-    #[arg(long, global = true, default_value_t = 2)]
-    threads: usize,
+    /// Inference threads [default: saved project setting, or 2].
+    #[arg(long, global = true, value_name = "N")]
+    threads: Option<usize>,
     #[command(subcommand)]
     command: Command,
 }
 #[derive(Args, Clone)]
 struct QueryArgs {
+    /// Search using keyword matches, semantic similarity, or both (hybrid).
     #[arg(long,value_enum,default_value_t=Mode::Hybrid)]
     mode: Mode,
+    /// Maximum number of source files in the result.
     #[arg(long, default_value_t = 5)]
     max_files: usize,
+    /// Estimated token budget for the complete response, including JSON metadata.
     #[arg(long, default_value_t = 2000)]
     max_tokens: usize,
+    /// Number of retrieval candidates considered before selecting evidence.
     #[arg(long, default_value_t = 40)]
     candidates: usize,
     /// Relevance cutoff, not an answerability probability.
     #[arg(long, default_value_t = 0.5)]
     min_similarity: f32,
+    /// Omit connections to related documents.
     #[arg(long)]
     no_connections: bool,
     /// Disable declaration context for recognized API options and key tables.
@@ -122,6 +136,7 @@ struct PageArgs {
     /// Continue the same target using its returned next_cursor.
     #[arg(long)]
     cursor: Option<String>,
+    /// Print structured JSON.
     #[arg(long)]
     json: bool,
 }
@@ -135,18 +150,46 @@ impl PageArgs {
 }
 #[derive(Subcommand)]
 enum Command {
-    /// Serve read-only documentation tools over MCP stdio for one existing index.
+    /// Initialize or refresh this project, its model, index, and ignore rules.
+    #[command(display_order = 0, after_help = cli_help::INIT)]
+    Init(InitArgs),
+    /// Initialize a project and connect Codex or Claude Code through MCP.
+    #[command(display_order = 0, after_help = cli_help::SETUP)]
+    Setup {
+        #[arg(value_enum)]
+        client: Client,
+        #[command(flatten)]
+        init: InitArgs,
+        /// Register for your user instead of only this project.
+        #[arg(long)]
+        global: bool,
+        /// Custom MCP server name.
+        #[arg(long)]
+        name: Option<String>,
+        /// Replace a same-named registration with different settings.
+        #[arg(long)]
+        replace: bool,
+    },
+    /// Serve documentation search and project initialization over MCP.
+    #[command(display_order = 7, after_help = cli_help::MCP)]
     Mcp {
+        /// Project root to bind, including before initialization [default: current project].
+        #[arg(long)]
+        root: Option<PathBuf>,
         /// Optional consumer-document role config, selectable per query as source_profile=usage.
         #[arg(long)]
         usage_config: Option<PathBuf>,
     },
-    /// Explicit provisioning; the only command that accesses the network.
+    /// Download local search models.
+    #[command(display_order = 1, after_help = cli_help::MODEL)]
     Model {
         #[command(subcommand)]
         command: ModelCommand,
     },
+    /// Index a project's Markdown files or refresh its index.
+    #[command(display_order = 2, after_help = cli_help::INDEX)]
     Index {
+        /// Project directory containing Markdown documentation.
         #[arg(default_value = ".")]
         root: PathBuf,
         /// Provision content embeddings; subsequent refreshes maintain them automatically.
@@ -155,21 +198,28 @@ enum Command {
         /// Move this index to ROOT and refresh it atomically, reusing cached embeddings.
         #[arg(long)]
         relocate: bool,
+        /// Print structured JSON.
         #[arg(long)]
         json: bool,
     },
+    /// Search documentation with a question and return relevant source passages.
+    #[command(display_order = 3, after_help = cli_help::BRIEF)]
     Brief {
+        /// Question or search terms for the indexed documentation.
         query: String,
         /// Include up to three follow-up reads within the same total token budget.
         #[arg(long)]
         with_guidance: bool,
         #[command(flatten)]
         options: QueryArgs,
+        /// Print structured JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Read an indexed FILE or FILE#anchor in source order, including child sections. No model needed.
+    /// Read an indexed file or section, including child sections.
+    #[command(display_order = 5, after_help = cli_help::READ)]
     Read {
+        /// File path or FILE#anchor returned by a search or outline.
         target: String,
         /// Include introductory text from enclosing headings as separate source slices.
         #[arg(long)]
@@ -177,20 +227,26 @@ enum Command {
         #[command(flatten)]
         options: PageArgs,
     },
-    /// Plan ancestor introductions and the full FILE#anchor subtree. No model needed.
+    /// List the source sections used for a contextual read.
+    #[command(display_order = 8, after_help = cli_help::PLAN)]
     Plan {
+        /// File path or FILE#anchor returned by a search or outline.
         target: String,
         #[command(flatten)]
         options: PageArgs,
     },
-    /// List a file's heading anchors in source order. No model needed.
+    /// List a document's headings and exact section references.
+    #[command(display_order = 4, after_help = cli_help::OUTLINE)]
     Outline {
+        /// Indexed file path returned by a search.
         path: String,
         #[command(flatten)]
         options: PageArgs,
     },
-    /// Show discovery ranks, contributing source blocks, and assembly decisions.
+    /// Inspect how search results were found and selected.
+    #[command(display_order = 11, after_help = cli_help::DIAGNOSE)]
     Diagnose {
+        /// Question or search terms to investigate.
         query: String,
         /// Return bounded omission hints and read targets instead of the full trace.
         #[arg(long)]
@@ -198,10 +254,12 @@ enum Command {
         #[command(flatten)]
         options: QueryArgs,
     },
-    /// Read JSON-string queries from stdin, write one JSON response per line, retain the model.
+    /// Run multiple searches through stdin, keeping the model loaded.
+    #[command(display_order = 10, after_help = cli_help::BATCH)]
     Batch {
         #[command(flatten)]
         options: QueryArgs,
+        /// Return search diagnostics instead of ordinary search results.
         #[arg(long)]
         diagnostics: bool,
         /// Bound diagnostics to omission hints and read targets.
@@ -211,36 +269,85 @@ enum Command {
         #[arg(long, conflicts_with_all = ["diagnostics", "compact"])]
         with_guidance: bool,
     },
+    /// Find related documents using links, identifiers, and semantic similarity.
+    #[command(display_order = 9, after_help = cli_help::RELATED)]
     Related {
+        /// Indexed file path to explore.
         path: String,
+        /// Maximum number of connections to return.
         #[arg(long, default_value_t = 8)]
         limit: usize,
+        /// Print structured JSON.
         #[arg(long)]
         json: bool,
     },
+    /// Show index information and optionally check document freshness.
+    #[command(display_order = 6, after_help = cli_help::STATUS)]
     Status {
         /// Check added, changed, removed, ignored and unreadable source documents. No model needed.
         #[arg(long)]
         check: bool,
+        /// Print structured JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Compare all three retrieval modes. Connections are excluded; graph is opt-in.
+    /// Compare search modes using an evaluation dataset.
+    #[command(display_order = 12, after_help = cli_help::EVAL)]
     Eval {
+        /// JSON file containing evaluation cases.
         dataset: PathBuf,
         #[command(flatten)]
         options: QueryArgs,
+        /// Print per-query results and limitations as JSON.
         #[arg(long)]
         json: bool,
     },
 }
+#[derive(Args)]
+struct InitArgs {
+    /// Project directory [default: current project].
+    root: Option<PathBuf>,
+    /// Use existing model files without attempting downloads.
+    #[arg(long)]
+    offline: bool,
+    /// Also prepare optional content embeddings; remembered for later initialization.
+    #[arg(long)]
+    content: bool,
+    /// Print the setup report as JSON.
+    #[arg(long)]
+    json: bool,
+}
 #[derive(Subcommand)]
 enum ModelCommand {
+    /// Download or repair local model files; no API key required.
+    #[command(after_help = cli_help::MODEL_INSTALL)]
     Install {
         /// Provision the optional MiniLM reranker instead of the embedding model.
         #[arg(long)]
         reranker: bool,
     },
+}
+fn setup_output(report: &serde_json::Value, json: bool) -> Result<()> {
+    if json {
+        return output(report);
+    }
+    println!(
+        "Lore ready for {}",
+        report["root"].as_str().unwrap_or_default()
+    );
+    if let Some(path) = report["configuration"].as_str() {
+        println!("Configuration: {path}");
+    }
+    if let Some(path) = report["instructions"].as_str() {
+        println!("Agent instructions: {path}");
+    }
+    if report["mcp_verified"] == true {
+        println!("MCP connection verified.");
+    }
+    if let Some(next) = report["next"].as_str() {
+        println!("{next}");
+    }
+    Ok(())
 }
 fn main() {
     if let Err(e) = run() {
@@ -272,14 +379,18 @@ fn reranker(
         Ok(None)
     }
 }
+fn model_directory(directory: Option<PathBuf>, name: &str, option: &str) -> Result<PathBuf> {
+    if let Some(directory) = directory {
+        return Ok(directory);
+    }
+    let home = std::env::home_dir()
+        .filter(|path| path.is_absolute())
+        .with_context(|| format!("Cannot determine home directory; supply {option}"))?;
+    Ok(home.join(".lore/models").join(name))
+}
 fn run() -> Result<()> {
     let cli = Cli::parse();
-    let model_dir = cli
-        .model_dir
-        .unwrap_or_else(|| cli.index_dir.join("models/bge-small"));
-    let reranker_dir = cli
-        .reranker_dir
-        .unwrap_or_else(|| cli.index_dir.join("models/minilm-reranker"));
+    let reranker_dir = model_directory(cli.reranker_dir, "minilm-reranker", "--reranker-dir")?;
     if let Command::Model {
         command: ModelCommand::Install { reranker },
     } = cli.command
@@ -287,27 +398,80 @@ fn run() -> Result<()> {
         return if reranker {
             reranking::install(&reranker_dir)
         } else {
-            embedding::install(&model_dir)
+            embedding::install(&model_directory(cli.model_dir, "bge-small", "--model-dir")?)
         };
     }
-    if let Command::Mcp { usage_config } = cli.command {
-        return lore::mcp::serve_stdio(lore::mcp::LoreServer::open(
-            cli.index_dir,
+    let root = match &cli.command {
+        Command::Init(init) | Command::Setup { init, .. } => init.root.as_deref(),
+        Command::Mcp { root, .. } => root.as_deref(),
+        _ => None,
+    };
+    let mut configuration = onboarding::configuration(
+        root,
+        cli.index_dir.as_deref(),
+        cli.model_dir.as_deref(),
+        cli.threads,
+        None,
+    )?;
+    if let Command::Init(init) | Command::Setup { init, .. } = &cli.command {
+        configuration.content |= init.content;
+    }
+    let model_dir = configuration.model_dir.clone();
+    let index_dir = configuration.index_dir.clone();
+    let threads = configuration.threads;
+    match &cli.command {
+        Command::Init(init) => {
+            let report = onboarding::initialize(&configuration, init.offline)?;
+            return setup_output(&report, init.json);
+        }
+        Command::Setup {
+            client,
+            init,
+            global,
+            name,
+            replace,
+        } => {
+            let report = onboarding::setup(
+                &configuration,
+                *client,
+                *global,
+                name.as_deref(),
+                *replace,
+                init.offline,
+            )?;
+            return setup_output(&report, init.json);
+        }
+        _ => {}
+    }
+    if let Command::Mcp { usage_config, .. } = cli.command {
+        return lore::mcp::serve_stdio(lore::mcp::LoreServer::open_project(
+            index_dir,
             model_dir,
-            cli.threads,
+            threads,
             usage_config,
+            Some(configuration.root),
         )?);
     }
-    let mut index = Index::open(&cli.index_dir)?;
+    if !matches!(cli.command, Command::Index { .. }) {
+        if matches!(cli.command, Command::Status { .. })
+            && onboarding::indexed_root(&index_dir)?.is_none()
+        {
+            return output(&onboarding::uninitialized(&configuration.root, &index_dir));
+        }
+        onboarding::require_initialized(&index_dir)?;
+    }
+    let mut index = Index::open(&index_dir)?;
     match cli.command {
-        Command::Model { .. } | Command::Mcp { .. } => unreachable!(),
+        Command::Model { .. } | Command::Mcp { .. } | Command::Init(_) | Command::Setup { .. } => {
+            unreachable!()
+        }
         Command::Index {
             root,
             json,
             content,
             relocate,
         } => {
-            let mut model = LocalEmbedder::load(&model_dir, cli.threads)?;
+            let mut model = LocalEmbedder::load(&model_dir, threads)?;
             let r = if relocate {
                 index.index_relocated(&root, &mut model, content)?
             } else if content {
@@ -349,8 +513,8 @@ fn run() -> Result<()> {
             with_guidance,
         } => {
             let options = options.options()?;
-            let mut model = model(options.mode, &model_dir, cli.threads)?;
-            let mut reranker = reranker(options.rerank, &reranker_dir, cli.threads)?;
+            let mut model = model(options.mode, &model_dir, threads)?;
+            let mut reranker = reranker(options.rerank, &reranker_dir, threads)?;
             if with_guidance {
                 let result = index.guided_brief_with_reranker(
                     &query,
@@ -566,8 +730,8 @@ fn run() -> Result<()> {
             compact,
         } => {
             let options = options.options()?;
-            let mut model = model(options.mode, &model_dir, cli.threads)?;
-            let mut reranker = reranker(options.rerank, &reranker_dir, cli.threads)?;
+            let mut model = model(options.mode, &model_dir, threads)?;
+            let mut reranker = reranker(options.rerank, &reranker_dir, threads)?;
             let diagnostic = index.diagnose_with_reranker(
                 &query,
                 model.as_mut().map(|m| m as &mut dyn embedding::Embedder),
@@ -587,8 +751,8 @@ fn run() -> Result<()> {
             with_guidance,
         } => {
             let options = options.options()?;
-            let mut model = model(options.mode, &model_dir, cli.threads)?;
-            let mut reranker = reranker(options.rerank, &reranker_dir, cli.threads)?;
+            let mut model = model(options.mode, &model_dir, threads)?;
+            let mut reranker = reranker(options.rerank, &reranker_dir, threads)?;
             let mut failures = 0;
             let mut input = io::stdin().lock();
             let mut number = 0;
@@ -660,7 +824,10 @@ fn run() -> Result<()> {
                 index.status()?
             };
             if json {
-                output(&r)?;
+                let mut value = serde_json::to_value(&r)?;
+                value["initialized"] = serde_json::json!(true);
+                value["state"] = serde_json::json!("ready");
+                output(&value)?;
             } else {
                 println!(
                     "{} documents · {} sections · {} blocks · revision {}\nRoot: {}\nReindex required: {}",
@@ -674,10 +841,10 @@ fn run() -> Result<()> {
                 if !r.root_available {
                     if r.root.is_some() {
                         println!(
-                            "Source root unavailable. After a move, run `lore index NEW_ROOT --relocate`."
+                            "Source root unavailable. After a move, update saved project paths and run `lore index NEW_ROOT --relocate`."
                         );
                     } else {
-                        println!("No source root indexed; run `lore index PATH`.");
+                        println!("No source root indexed; run `lore init PATH`.");
                     }
                 }
                 if let Some(check) = &r.source_check {
@@ -715,9 +882,9 @@ fn run() -> Result<()> {
                 &std::fs::read(&dataset)
                     .with_context(|| format!("Cannot read {}", dataset.display()))?,
             )?;
-            let mut model = LocalEmbedder::load(&model_dir, cli.threads)?;
+            let mut model = LocalEmbedder::load(&model_dir, threads)?;
             let options = options.options()?;
-            let mut reranker = reranker(options.rerank, &reranker_dir, cli.threads)?;
+            let mut reranker = reranker(options.rerank, &reranker_dir, threads)?;
             let report = evaluate::evaluate_with_reranker(
                 &index,
                 &mut model,

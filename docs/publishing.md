@@ -16,13 +16,12 @@ the project without publishing.
 
 ## Release
 
-For the first release, keep version `0.1.0`. For later releases, update `version`
-in `Cargo.toml` and run `cargo check` to update `Cargo.lock`. Commit and push those
-changes before tagging:
+For each release, update `version` in `Cargo.toml` and run `cargo check` to update
+`Cargo.lock`. Commit and push those changes before tagging. For version `0.1.1`:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag -a v0.1.1 -m "Release 0.1.1"
+git push origin v0.1.1
 ```
 
 The tag must exactly match `v` followed by the package version. The workflow:
@@ -36,6 +35,20 @@ Follow the run in the repository's **Actions** tab. Branch pushes, pull requests
 and manual runs never publish. For setup or network failures, fix the issue and
 rerun the failed jobs. A rerun uses the same tagged commit; source fixes need a
 new tag. Published versions cannot be overwritten.
+
+Before tagging, review the installed command's onboarding help:
+
+```sh
+./dev.sh run --help
+./dev.sh run init --help
+./dev.sh run setup codex --help
+./dev.sh run setup claude --help
+./dev.sh run mcp --help
+```
+
+The package must include `src/cli_help.rs`, `src/onboarding.rs`, `src/project.rs`,
+and the updated guides. Check the [agent setup workflow](agents.md) in a temporary
+project with cached models before releasing onboarding changes.
 
 The GitHub repository can remain private, but the packaged source on crates.io
 is public. Repository and guide links become publicly accessible when you make

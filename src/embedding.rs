@@ -131,7 +131,7 @@ impl Embedder for LocalEmbedder {
     }
 }
 
-/// The only network operation in Lore. Called solely by `model install`.
+/// Explicit model provisioning for model install and project initialization.
 pub fn install(directory: &Path) -> Result<()> {
     fs::create_dir_all(directory)?;
     let agent: ureq::Agent = ureq::Agent::config_builder()

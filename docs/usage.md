@@ -11,17 +11,31 @@ First [install Lore](../README.md#install), then run:
 
 ```sh
 cd /path/to/project
-lore model install
-lore index .
+lore init
 ```
 
-`model install` downloads the search model (~67 MB). Indexing creates
-`.lore/index.sqlite` and leaves your documents unchanged. Later indexing and
-searches run locally.
+`init` downloads or verifies the search model (~67 MB), indexes Markdown, adds
+`.lore/` to `.gitignore`, and saves settings in `.lore/project.json`. Models live
+in `~/.lore/models/bge-small`, shared across projects. The default index is
+`.lore/index.sqlite`; source documents are unchanged. Later indexing and searches
+run locally. Use `lore init --offline` to require already-provisioned model assets.
+A separate `lore model install` can provision the shared model in advance.
 
-Run the following examples from that same directory. To use the index from
-elsewhere, pass `--index-dir /path/to/project/.lore` to each Lore command.
-Each index belongs to one project.
+Commands from the project or its subdirectories discover saved settings. To use
+the index from elsewhere, pass `--index-dir /path/to/project/.lore` to each command.
+Each index belongs to one project. To save custom paths at initialization:
+
+```sh
+lore --index-dir /path/to/index --model-dir /path/to/models/bge-small init /path/to/project
+```
+
+`--threads N` and `init --content` are also remembered. Explicit flags override
+saved settings. Existing valid indexes work without a settings file; running
+`init` adopts them. The lower-level `index ROOT` command remains available for
+manual indexing, but does not save settings or manage ignore rules.
+
+For automatic AI client registration, run `lore setup codex` or
+`lore setup claude`; see [MCP setup](mcp.md).
 
 ## Search
 
@@ -75,12 +89,16 @@ own cursors; use each with the command that returned it.
 
 ```sh
 lore status --check --json
-lore index .
+lore init
 ```
 
 The status report identifies added, changed, removed, or unreadable documents.
-Indexing refreshes changed content and reuses cached embeddings where possible.
-There is no automatic file watcher.
+Initialization refreshes with saved paths and options, reusing cached embeddings
+where possible. There is no automatic file watcher. Existing initialized indexes
+remain initialized when stale; inspect `needs_reindex` before relying on results.
+Before initialization, `status` reports `initialized: false` and
+`state: "not_initialized"` without creating a database. Search and reading require
+an initialized index.
 
 Lore reads UTF-8 `.md` and `.markdown` files up to 2 MiB each. It respects
 `.gitignore` and `.loreignore`, skips build/cache directories, and does not follow

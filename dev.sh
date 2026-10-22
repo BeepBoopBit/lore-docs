@@ -31,7 +31,7 @@ Extra test arguments go to cargo test. install/reinstall still accept --prod.
 Setup / refresh options:
   --name NAME         MCP name (default: lore-<repository-directory-name>)
   --index-dir DIR     Index directory (default: <Lore checkout>/.lore/mcp/<name>)
-  --model-dir DIR     Shared assets (default: <Lore checkout>/.lore/models/bge-small)
+  --model-dir DIR     Shared assets (default: ~/.lore/models/bge-small)
 Setup-only options:
   --usage-config FILE Optional source profile, selectable per query as 'usage'
   --replace           Replace an existing named Codex MCP entry
@@ -279,7 +279,11 @@ prepare_repository() {
     index_dir="$(absolute_path "${index_dir:-$PRODUCT_ROOT/.lore/mcp/$name}")"
     [[ "$index_dir" != / && ! -L "$index_dir" && ( ! -e "$index_dir" || -d "$index_dir" ) ]] ||
         fail "index directory must be a directory other than /, not a symbolic link: $index_dir"
-    model_dir="$(absolute_path "${model_dir:-$PRODUCT_ROOT/.lore/models/bge-small}")"
+    if [[ -z "$model_dir" ]]; then
+        [[ "${HOME:-}" == /* ]] || fail 'HOME must be an absolute path; alternatively supply --model-dir'
+        model_dir="$HOME/.lore/models/bge-small"
+    fi
+    model_dir="$(absolute_path "$model_dir")"
     [[ "$model_dir" != / && ( ! -e "$model_dir" || -d "$model_dir" ) ]] ||
         fail "model path must be a directory other than /: $model_dir"
     if [[ -n "$usage_config" ]]; then

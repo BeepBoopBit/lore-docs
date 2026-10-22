@@ -23,18 +23,24 @@ The Bash helper `./dev.sh install` is also available for development.
 ## Use from the terminal
 
 ```sh
-# Download the search model once (~67 MB).
-lore model install
-
-# Index a project's Markdown files.
-lore index /path/to/project
+# Run inside the project you want to search.
+# Prepare the model, index Markdown, and update .gitignore.
+lore init
 
 # Search the docs.
 lore brief "How do I configure this project?"
 ```
 
-Run these commands from the same directory. Lore stores its index and models
-in `.lore/`; use `--index-dir PATH` for a separate index.
+Initialization saves project settings in `.lore/project.json`; commands from the
+project or its subdirectories reuse them. Repeat `lore init` to refresh. Each
+project's index lives in `.lore/`; use `--index-dir PATH` during initialization
+for a separate index. Models live in `~/.lore/models/` and are shared across
+projects. Initialization downloads missing assets once; use `--offline` to
+require cached assets, or `--model-dir PATH` to save a custom model directory.
+The local search model is separate from your AI client's model; no API key is needed.
+
+Already have models in a project's `.lore/models/`? See
+[reusing existing downloads](docs/operations.md#reuse-existing-model-downloads).
 
 Use a file path returned by the search to explore its headings or read its text:
 
@@ -44,20 +50,37 @@ lore read README.md --json
 ```
 
 Add `--json` to `brief` for structured results. After editing docs, rerun
-`lore index /path/to/project` to refresh the index.
+`lore init` to refresh using saved settings. Run `lore --help` or
+`lore <command> --help` for options and examples.
 
 ## Use with AI agents
 
-Give your agent the [setup guide](docs/agents.md), or paste this request:
+Initialize and connect your current project in one command:
+
+```sh
+lore setup codex
+# Or:
+lore setup claude
+```
+
+Setup verifies the local MCP server, preserves existing client settings, and adds
+a managed instruction block to `AGENTS.md` or `CLAUDE.md`. Project configuration
+uses `.codex/config.toml` or `.mcp.json`. Use `--global` for user configuration,
+`--name NAME` for a distinct server entry, or `--replace` for a conflicting entry.
+Reload the client after setup and check `lore_status`. See [MCP setup](docs/mcp.md)
+for configuration paths, trust, and initialization through MCP.
+
+You can also give your agent the [setup guide](docs/agents.md), or paste this request:
 
 ```text
 Set up Lore for this project using:
 https://raw.githubusercontent.com/BeepBoopBit/lore-docs/main/docs/agents.md
-Install lore-docs with Cargo, prepare the index, verify it, and run a search.
-Connect it through MCP if this client supports local MCP servers.
+Install lore-docs with Cargo. Run lore setup codex or lore setup claude for
+this client, reload its MCP configuration, and verify lore_status and a search.
+For shell-only use, run lore init and verify lore status --check --json.
 ```
 
-Agents can use JSON CLI output or the read-only MCP tools. See
+Agents can use JSON CLI output or the MCP search and reading tools. See
 [MCP setup](docs/mcp.md) for Codex and other clients.
 
 ## Development

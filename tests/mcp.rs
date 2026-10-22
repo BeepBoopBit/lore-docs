@@ -71,6 +71,7 @@ impl Client {
             command.arg("--usage-config").arg(path);
         }
         let mut child = command
+            .current_dir(state)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -216,14 +217,16 @@ fn mcp_negotiates_lists_schemas_and_matches_cli_without_models() {
             "lore_outline",
             "lore_plan",
             "lore_diagnose",
-            "lore_status"
+            "lore_status",
+            "lore_init"
         ])
     );
     for tool in tools {
         assert_eq!(tool["inputSchema"]["type"], "object");
         assert_eq!(tool["inputSchema"]["additionalProperties"], false);
-        assert_eq!(tool["annotations"]["readOnlyHint"], true);
-        assert_eq!(tool["annotations"]["openWorldHint"], false);
+        let initializes = tool["name"] == "lore_init";
+        assert_eq!(tool["annotations"]["readOnlyHint"], !initializes);
+        assert_eq!(tool["annotations"]["openWorldHint"], initializes);
     }
     let status = payload(client.call("lore_status", json!({})));
     assert_eq!(status["needs_reindex"], false);
@@ -469,7 +472,7 @@ fn mcp_supports_discovery_and_inline_protocol_metadata() {
             .contains(&json!("2026-07-28"))
     );
     let list = client.rpc("tools/list", json!({"_meta":meta}));
-    assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 6);
+    assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 7);
     let r = client.rpc(
         "tools/call",
         json!({"_meta":meta,"name":"lore_status","arguments":{}}),
@@ -479,19 +482,21 @@ fn mcp_supports_discovery_and_inline_protocol_metadata() {
 }
 
 #[test]
-fn mcp_startup_rejects_missing_indexes_and_invalid_profiles_on_stderr() {
+fn mcp_bootstraps_missing_indexes_and_rejects_invalid_profiles_on_stderr() {
     let empty = TempDir::new().unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_lore"))
-        .args(["--index-dir", empty.path().to_str().unwrap(), "mcp"])
-        .output()
-        .unwrap();
-    assert!(!out.status.success() && out.stdout.is_empty());
-    assert!(
-        String::from_utf8(out.stderr)
-            .unwrap()
-            .contains("No Lore index")
-    );
+    let mut client = Client::spawn(empty.path(), None);
+    client.initialize("2025-11-25");
+    let status = payload(client.call("lore_status", json!({})));
+    assert_eq!(status["initialized"], false);
+    assert_eq!(status["state"], "not_initialized");
+    let search = client.call("lore_brief", json!({"query":"pending", "mode":"keyword"}));
+    assert_eq!(search["result"]["isError"], true);
+    let initialized = client.call("lore_init", json!({"offline":true}));
+    assert_eq!(initialized["result"]["isError"], true);
     assert!(!empty.path().join("index.sqlite").exists());
+    let escaped = client.call("lore_init", json!({"root":"/elsewhere", "offline":true}));
+    assert_eq!(escaped["result"]["isError"], true);
+    client.close();
     let (_corpus, state, _) = fixture();
     let config = state.path().join("invalid.json");
     fs::write(

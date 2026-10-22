@@ -9,7 +9,8 @@ projects, using Cargo for Lore's Rust code.
 - Bash, Rust 1.88+, and a native C/C++ toolchain for builds.
 - rustfmt and Clippy for formatting and lint checks.
 - Python 3.9+ for the installer tests.
-- Codex CLI for `setup`; it is optional for building and testing Lore.
+- Codex CLI for the older `./dev.sh setup` helper; optional for builds and tests.
+  Native `lore setup codex/claude` writes client configuration directly.
 
 Linux x86-64 is the tested platform. Start with:
 
@@ -35,7 +36,7 @@ does not install system tools or change your shell settings.
 | `test` | Run Rust tests, followed by installer tests if they pass. |
 | `test ...` | Forward arguments to Cargo and run only Rust tests. |
 | `build` | Build `target/release/lore`. |
-| `setup PATH` / `refresh PATH` | Prepare or refresh an [MCP connection](mcp.md). |
+| `setup PATH` / `refresh PATH` | Prepare or refresh a checkout-managed [MCP connection](mcp.md#use-the-checkout-helper). |
 
 ```sh
 ./dev.sh run --help
@@ -46,9 +47,16 @@ does not install system tools or change your shell settings.
 ```
 
 Builds, tests, and code checks run in the checkout. `run` keeps your calling
-directory, so relative project paths and `.lore/` resolve there. Build, fetch,
-test, and Clippy commands use `--locked`; update `Cargo.lock` deliberately when
-changing dependencies.
+directory, so relative project paths and the `.lore/` index resolve there. Models
+default to `~/.lore/models/`, shared with installed Lore and the setup helper.
+Build, fetch, test, and Clippy commands use `--locked`; update `Cargo.lock`
+deliberately when changing dependencies.
+
+Native `lore init` and `lore setup codex/claude` work from the installed executable;
+they save settings in the target project's `.lore/project.json`. The older helper
+uses separate `.lore/mcp/` indexes in this checkout and requires the same flags
+on each refresh. Use the [native workflow](mcp.md#automatic-client-setup) for
+ordinary project onboarding.
 
 ## Test the helper
 
@@ -86,8 +94,10 @@ the crate after the checks pass.
 | Location | Responsibility |
 | --- | --- |
 | `src/main.rs`, `src/lib.rs` | CLI entry point and library exports. |
+| `src/cli_help.rs` | Command examples and onboarding help. |
+| `src/onboarding.rs`, `src/project.rs` | Saved project settings, initialization, safe client configuration, and managed instructions. |
 | `src/index.rs`, `src/markdown.rs`, `src/embedding.rs` | Document parsing, SQLite indexes, and local embeddings. |
 | `src/search.rs`, `src/retrieval.rs`, `src/selection.rs` | Retrieval, ranking, and passage selection. |
 | `src/reading.rs`, `src/context.rs`, `src/mcp.rs` | Source reads, enclosing context, and MCP tools. |
-| `tests/` | Retrieval and MCP integration tests. |
+| `tests/` | Retrieval, onboarding, model-path, and MCP integration tests. |
 | `scripts/test_dev_installer.py` | Dev helper and installation tests. |
