@@ -1,0 +1,31 @@
+# Rust build output and formatter backups. Keep Cargo.lock versioned.
+/target/
+*.rs.bk
+
+# Local Lore indexes, models, corpus snapshots, and scratch evaluations.
+.lore/
+
+# Local benchmark data and saved evaluation reports.
+/evals/
+
+# Python evaluation tools: bytecode, environments, and caches.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment overrides; keep shareable examples eligible for commits.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Editor backups and OS metadata.
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

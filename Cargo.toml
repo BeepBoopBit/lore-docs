@@ -1,0 +1,57 @@
+[package]
+name = "lore-docs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Local Markdown discovery for agents"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/BeepBoopBit/lore-docs"
+keywords = ["markdown", "search", "mcp", "documentation", "local"]
+categories = ["command-line-utilities", "text-processing"]
+publish = ["crates-io"]
+include = [
+    "/src/**",
+    "/tests/**",
+    "/docs/**",
+    "/scripts/test_dev_installer.py",
+    "/scripts/verify-offline.sh",
+    "/dev.sh",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/LICENSE",
+    "/.gitignore",
+]
+
+[lib]
+name = "lore"
+path = "src/lib.rs"
+
+[[bin]]
+name = "lore"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+fastembed = { version = "=7.1.0", default-features = false, features = ["ort-download-binaries-rustls-tls"] }
+ignore = "0.4"
+percent-encoding = "2"
+pulldown-cmark = "0.13"
+regex = "1"
+rmcp = { version = "=3.5.1", default-features = false, features = ["server", "macros", "transport-io"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"
+sqlite-vec = "=0.1.7"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+strip = true
